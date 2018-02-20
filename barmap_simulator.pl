@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # -*-CPerl-*-
-# Last changed Time-stamp: <2018-02-20 13:36:20 mtw>
+# Last changed Time-stamp: <2018-02-20 14:58:42 mtw>
 
 use Getopt::Long;
 use Pod::Usage;
@@ -446,13 +446,19 @@ in minimum 3 and 65% in minimum 5 the I<STRING> looks as follows
 =item B<-eq> I<INT>
 
 If speficied, treekin simulation on the last landscape is performed
-until the pecified stop time (recommended value 1000000) 
+until the pecified stop time (recommended value 1000000).
 
 =item B<-rs> I<STRING>
 
 Suffix of the binary rates files produces by barriers (default: rates.bin)
 
 =back
+
+=head1 SOURCE AVAILABITY
+
+Source code for this distribution is available from the
+L<ViennaRNA/BarMap GitHub
+repository|https://github.com/ViennaRNA/BarMap>.
 
 =head1 AUTHORS
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # -*-CPerl-*-
-# Last changed Time-stamp: <2018-01-04 15:20:40 mtw>
+# Last changed Time-stamp: <2018-02-20 13:36:20 mtw>
 
 use Getopt::Long;
 use Pod::Usage;
@@ -43,7 +43,6 @@ die $! unless (defined $OUT);
 my ($rs, $cs)  = parse_bar_map();
 my $p_zeros    = $P0;
 my $start_time = $T0;
-#my $stop_time = calculate_stop_time($start_time);
 my $stop_time  = $T8; 
 my $global_time = 0.0;
 #print Dumper(\@FILES);
@@ -52,19 +51,18 @@ my $global_time = 0.0;
 my $flag = 0;
 for (my $file = 0; $file<=$#FILES; $file++) {
   $stop_time = $TX, $flag = 1 if ($#FILES == $file) && ($TX > 0);
-  print $OUT "# processing file ".$FILES[$file]." (#$file)\n";
+  print $OUT "# Rates file: ".$FILES[$file]." (#$file)\n";
   if ($EQ > 0){
     if ($file == $#FILES){
       $stop_time = $EQ;
-      print $OUT "#last landscape, setting t8 to $EQ\n";
+      print $OUT "# Info: last landscape, setting t8 to $EQ\n";
     }
   }
-  print $OUT "# stop time $stop_time\n";
 #  print $OUT "p_zeros $p_zeros\n";
   my $command = build_command($p_zeros,
 			      $stop_time,
 			      $FILES[$file]);
-  print $OUT "# cmd $command <<\n"; 
+  print $OUT "# Cmd: $command\n"; 
   my ($stop, $densities, $tc) = do_simulation($command, $flag);
   if ($stop == -1) {
     print STDERR "Treekin ERROR at inputfile $FILES[$file]\n";
@@ -100,21 +98,21 @@ sub dump_time_course {
 
   return if $flag;
   $stop += $global_time;
-  print $OUT
-      "#^global_time $stop\n",
-      "\@with line\n",
-      "\@line on\n",
-      "\@line loctype world\n",
-      "\@line g0\n",
-      "\@line $stop, 1, $stop, 0\n",
-      "\@line linewidth .1\n",
-      "\@line linestyle 1\n",
-      "\@line color 7\n",
-      "\@line arrow 0\n",
-      "\@line arrow type 0\n",
-      "\@line arrow length 1.000000\n",
-      "\@line arrow layout 1.000000, 1.000000\n",
-      "\@line def\n";
+#  print $OUT
+#      "#^global_time $stop\n",
+#      "\@with line\n",
+#      "\@line on\n",
+#      "\@line loctype world\n",
+#      "\@line g0\n",
+#      "\@line $stop, 1, $stop, 0\n",
+#      "\@line linewidth .1\n",
+#      "\@line linestyle 1\n",
+#      "\@line color 7\n",
+#      "\@line arrow 0\n",
+#      "\@line arrow type 0\n",
+#      "\@line arrow length 1.000000\n",
+#      "\@line arrow layout 1.000000, 1.000000\n",
+#      "\@line def\n";
 }
 
 #---
@@ -132,9 +130,9 @@ sub remap_densities {
 			      || ($_->[1] == -1))} @{zip($current, $next)}];
   # there can be duplicate entries in the barmap file
   $tuples = uniq_tuples($tuples);
-  print STDERR ">>tuples\n";
-  print STDERR Dumper(\$tuples);
-  print STDERR ">>tuples DONE\n";
+  #print STDERR ">>tuples\n";
+  #print STDERR Dumper(\$tuples);
+  #print STDERR ">>tuples DONE\n";
   my $dens_sum=0.;
   my @d = @$densities;
   shift @d;
@@ -404,12 +402,19 @@ from an initial population distribution on the first landscape (option
 B<-p0>), this tool calls I<treekin> to simulate the folding dynamics
 on each landscape for a certain time (measured in internal time,
 option B<-t8>). At the end of such an increment, population of each
-macrostate is mapped to the corrsponding macrostte in the next
-landscape, and I<treekin> is called with this start population.
+macrostate is mapped to the corrsponding macrostate in the next
+landscape, and I<treekin> is called with this new start population.
 
 A consistency check for overall popultion density is performed at
 every elongation step. This ensures that no population density is lost
 in the course of the simulation.
+
+=head1 NOTES
+
+I<treekin> simulations are performed on binary rates files per
+default. This implies that for each C<.bar> file referenced in
+C<barmap-file>, the corresponding binary rates file is present in the
+current working directory.
 
 =head1 OPTIONS
 
@@ -445,7 +450,7 @@ until the pecified stop time (recommended value 1000000)
 
 =item B<-rs> I<STRING>
 
-Suffix of the binary rates files produces by barriers (default: rates.bin"
+Suffix of the binary rates files produces by barriers (default: rates.bin)
 
 =back
 

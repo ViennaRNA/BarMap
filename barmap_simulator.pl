@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # -*-CPerl-*-
-# Last changed Time-stamp: <2018-02-20 14:58:42 mtw>
+# Last changed Time-stamp: <2019-02-16 14:06:05 mtw>
 
 use Getopt::Long;
 use Pod::Usage;
@@ -8,6 +8,7 @@ use Data::Dumper;
 use File::Basename;
 use strict;
 use warnings;
+use Carp;
 use vars qw/$T0 $T8 $TX $P0 $TINC $TEMP $EQ @FILES $TREEKIN %ENV $RATESUFFIX/;
 
 # defaults for global(s)
@@ -98,21 +99,6 @@ sub dump_time_course {
 
   return if $flag;
   $stop += $global_time;
-#  print $OUT
-#      "#^global_time $stop\n",
-#      "\@with line\n",
-#      "\@line on\n",
-#      "\@line loctype world\n",
-#      "\@line g0\n",
-#      "\@line $stop, 1, $stop, 0\n",
-#      "\@line linewidth .1\n",
-#      "\@line linestyle 1\n",
-#      "\@line color 7\n",
-#      "\@line arrow 0\n",
-#      "\@line arrow type 0\n",
-#      "\@line arrow length 1.000000\n",
-#      "\@line arrow layout 1.000000, 1.000000\n",
-#      "\@line def\n";
 }
 
 #---
@@ -137,8 +123,7 @@ sub remap_densities {
   my @d = @$densities;
   shift @d;
   $dens_sum += $_ for @d;
-  print STDERR " >> we have ".eval($#$densities)." densities with a total density of $dens_sum from the previous landscape\n";
-
+  print STDERR "# we have ".eval($#$densities)." densities with a total density of $dens_sum from the previous landscape\n";
 
   # now get # of states in new landscape
   my $maxnew=0;
@@ -148,29 +133,35 @@ sub remap_densities {
   }
 
   my @p = (0) x ($maxnew);
-  my $total = 0.;
   $maxnew=0;
   for(my $i=0; $i<= $#$tuples; $i++) {
     my $new = $tuples->[$i]->[1];
     my $old = $tuples->[$i]->[0];
-    if ($old < 0){
+    if ($old <= 0){
       print STDERR "skipping lmin $old\n";
+      next;  # do we need a next at the end here?
     }
     $p[$new] += $densities->[$old];
-    $total += $p[$new];
     if($new > $maxnew){ $maxnew = $new }
   }
-  print STDERR " >>remapped! New total density is $total\n";
-  print STDERR " >>max lmin in new landscape is $maxnew\n";
+  my $total = 0.;
+  $total += $_ for @p;
 
+  print STDERR "# remapped! New total density is $total\n";
+  print STDERR "# max lmin in new landscape is $maxnew\n\n";
 
-  print STDERR "\@p:\n";
-  print STDERR Dumper(\@p);
- # die;
+  if (abs($total-1) > 1e-6){ # delta old/new population
+    local $, = " ";
+    print "\n";
+    printf "%3d %3d  %7.5f %7.5f\n", @$_, $densities->[$_->[0]], $p[$_->[1]] for @$tuples;
+    print "\n";
+    croak "ERROR: Total remapped density is too large";
+  }
+
+  #print STDERR "\@p:\n";
+  #print STDERR Dumper(\@p);
+
   my $yy = zip(number_sequence(), \@p);
-#  print STDERR ">>yy\n";
-#  print STDERR Dumper($yy);
-#  print STDERR ">>yy DONE\n";
   my $p0 = "";
   my $p0_sum = 0.0;
   for(my $i=1; $i<= $#p; $i++) {
@@ -179,12 +170,6 @@ sub remap_densities {
     $p0 .= " --p0 $i=$pop";
       $p0_sum += $pop;
     }
-  
-#  for my $tuple (@$yy) {
-#    next if $tuple->[1] == 0;
-#    $p0_sum += $tuple->[1];
-#    $p0 .= " --p0 $tuple->[0]=$tuple->[1]" 
-#  }
 
   if ($p0_sum > 1.01) {
     print STDERR "$p0\np0_sum = $p0_sum\n";
@@ -215,12 +200,6 @@ sub uniq_tuples {
   }
   return \@uniq;
 }
-
-#---
-# returnes true if first and second of tuple is greater -1
-#sub is_defined {
-#  return ! (($_[0]->[0] == -1) || ($_[0]->[1] == -1));
-#}
 
 #---
 sub build_command {

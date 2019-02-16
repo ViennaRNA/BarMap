@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # -*-CPerl-*-
-# Last changed Time-stamp: <2018-02-20 15:51:41 mtw>
+# Last changed Time-stamp: <2019-02-16 11:44:52 ivo>
 
 # input at least barriers .bar file and a treekin trajectory
 # output coarse grained dynamic obtained from merging lmins
@@ -22,6 +22,7 @@ my $outdir = undef;
 my $regsfile = undef;
 my $bmfile = undef;
 my $tkfile = undef;
+my $debug_tags;
 my @merge_lists = ();
 my @new_labels = ();
 my @regs = ();
@@ -34,6 +35,7 @@ pod2usage(-verbose => 1)
 		    "regs|r=s"   => \$regsfile,
 		    "barmap|b=s" => \$bmfile,
 		    "tkin|t=s"   => \$tkfile,
+		    "debug-tags" => \$debug_tags,
 		    "man"        => sub{pod2usage(-verbose => 2)},
 		    "help|h"     => sub{pod2usage(-verbose => 1)}
 		   )
@@ -70,6 +72,7 @@ croak "cannot create directory $outdir" unless [-d $outdir];
 for my $nf (0..$#ARGV) {
   my $curfile = $ARGV[$nf];
   my ($seq, @lmin) = read_bar($curfile);
+  @tags = ("");
   foreach (@lmin[1..$#lmin]) { # [0] is empty
     my $str = $_->[1];
     my $t = "";
@@ -147,7 +150,10 @@ sub print_bar {
     #    next if $f==0; # skip unconnected
     next unless $num == $merge->[$num];
     $f = $merge->[$f] while ($merge->[$f] < $f);
-    printf $fh "%3d %s %6.2f %4d %6.2f\n", $n, $str, $e, $new[$f], $b;
+    printf $fh "%3d %s %6.2f %4d %6.2f", $n, $str, $e, $new[$f], $b;
+    print $fh " $tags[$num]" if $debug_tags;
+    print $fh "\n";
+
     $new[$num] = $n++;
   }
   return @new;
@@ -282,6 +288,11 @@ Barmap output file to be processed S<(default B<None>)>.
 
 Specifiy the name of an output directory where all created files end
 up S<(default B<coarse_minh>)>.
+
+=item B<--debug-tags>
+
+Append the matched tags to each line of the new bar file
+in order to verify which minima match which regex.
 
 =back
 

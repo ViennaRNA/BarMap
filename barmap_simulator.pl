@@ -12,7 +12,8 @@ use Carp;
 use vars qw/$T0 $T8 $TX $P0 $TINC $TEMP $EQ @FILES $TREEKIN %ENV $RATESUFFIX/;
 
 # defaults for global(s)
-$TREEKIN = "$ENV{HOME}/C/treekin/treekin";
+# $TREEKIN = "$ENV{HOME}/C/treekin/treekin";
+$TREEKIN = 'treekin';
 $T0 = 0.1;
 $T8 = 10;
 $TX = -1;

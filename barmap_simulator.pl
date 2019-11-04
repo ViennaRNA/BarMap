@@ -10,7 +10,6 @@ use strict;
 use warnings;
 use Carp;
 use Scalar::Util qw(reftype looks_like_number);
-use List::Util qw(all);
 use YAML;
 use vars qw/
   $T0 $T8 $TX $P0 $TINC $SIM_TIMES_FILE $TEMP $EQ @FILES $TREEKIN %ENV

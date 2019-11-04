@@ -392,7 +392,7 @@ sub to_columns {
 sub read_sim_times_file {
   my ($times_yaml_file) = @_;
 
-  # Parse simulation times from YAML file.
+  # Parse simulation times from YAML file, skip undef entries (separators etc)
   my ($times_ref, @garbage)
     = grep {defined} YAML::LoadFile($times_yaml_file);
 
@@ -412,21 +412,22 @@ sub read_sim_times_file {
       unless reftype $rates_times_ref
              and reftype $rates_times_ref eq reftype {};
 
-    # Check validity of start, end, inc params and its values.
+    # Check general validity of start, end, inc params and its values.
     my %is_valid_param = map {$_ => 1} qw(start end inc);
     while (my ($param, $value) = each %$rates_times_ref) {
       die "Simulation times file '$times_yaml_file' contains ",
           "invalid parameter '$param' for rates file '$rates_file'"
         unless $is_valid_param{$param};
 
-      die "Simulation times file '$times_yaml_file' contains non-numeric",
+      die "Simulation times file '$times_yaml_file' contains non-positive",
           " value '$value' for parameter '$param' of rates file '$rates_file'"
-        unless looks_like_number $value;
+        unless defined $value and looks_like_number $value and $value > 0.;
     }
   }
 
   return $times_ref;
 }
+
 
 =head1 NAME
 
@@ -479,16 +480,22 @@ Set time increment of kinetic simulation to I<FLOAT> (default: 1.02).
 
 =item B<-times-file> I<STRING>
 
-Path to a YAML file containing individual simulation time parameters (i.e.
+Path to a YAML file containing individual simulation time parameters (i.e.,
 start time, end time, and time increment) for one or more rates files.
 This is useful, e.g., to model a variable transcription rate along the RNA.
 The values from the file overwrite the global values set via other arguments
 (C<-t0>, C<-t8>, and C<-inc>) for the specified rates files.
 
-The file must contain a single dictionary where the keys are rates file
-names. The values are, again, single dictionaries which may contain one or
-more of the keys 'start', 'end', and 'inc', setting the respective parameter
-for that rates file.
+The file is structured like this:
+
+    "10.rates.bin":
+        start: 1
+        end: 100
+        inc: 1.9
+    "12.rates.bin":
+        inc: 1.8
+
+The order of the rates files is irrelevant.
 
 =item B<-T> I<FLOAT>
 

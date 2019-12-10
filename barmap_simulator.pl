@@ -9,7 +9,9 @@ use File::Basename;
 use strict;
 use warnings;
 use Carp;
-use vars qw/$T0 $T8 $TX $P0 $TINC $TEMP $EQ @FILES $TREEKIN %ENV $RATESUFFIX/;
+use vars qw/
+    $T0 $T8 $TX $P0 $TINC $TEMP $EQ @FILES $TREEKIN %ENV $RATESUFFIX $RECOVER
+/;
 
 # defaults for global(s)
 $TREEKIN = "$ENV{HOME}/C/treekin/treekin";
@@ -27,16 +29,18 @@ my $OUT;
 Getopt::Long::config('no_ignore_case');
 pod2usage(-verbose => 1)
     unless GetOptions("t0=f"  => \$T0,
-		      "t8=f"  => \$T8,
-		      "tX=f"  => \$TX,
-		      "inc=f" => \$TINC,
-		      "eq=i"  => \$EQ,
-		      "T=f"   => \$TEMP,
-		      "p0=s"  => \&process_opt_p0,
-		      "rs=s"  => \$RATESUFFIX,
-		      "o=s"   => \$outfile,
-		      "man"   => sub{pod2usage(-verbose => 2)},
-		      "help"  => sub{pod2usage(-verbose => 1)});
+		      "t8=f"    => \$T8,
+		      "tX=f"    => \$TX,
+		      "inc=f"   => \$TINC,
+		      "eq=i"    => \$EQ,
+		      "T=f"     => \$TEMP,
+		      "p0=s"    => \&process_opt_p0,
+		      "rs=s"    => \$RATESUFFIX,
+		      "o=s"     => \$outfile,
+		      "man"     => sub{pod2usage(-verbose => 2)},
+		      "help"    => sub{pod2usage(-verbose => 1)},
+		      "recover" => \$RECOVER,
+		   );
 
 defined $outfile ? open($OUT, ">", $outfile) : open($OUT, ">&STDOUT");
 die $! unless (defined $OUT);
@@ -62,8 +66,11 @@ for (my $file = 0; $file<=$#FILES; $file++) {
 #  print $OUT "p_zeros $p_zeros\n";
   my $command = build_command($p_zeros,
 			      $stop_time,
-			      $FILES[$file]);
-  print $OUT "# Cmd: $command\n"; 
+			      $FILES[$file],
+			      $RECOVER,
+			      $RATESUFFIX,
+			    );
+  print $OUT "# Cmd: $command\n";
   my ($stop, $densities, $tc) = do_simulation($command, $flag);
   if ($stop == -1) {
     print STDERR "Treekin ERROR at inputfile $FILES[$file]\n";
@@ -77,6 +84,7 @@ for (my $file = 0; $file<=$#FILES; $file++) {
   #print ">> file is $file<<\n";
   $p_zeros = remap_densities($densities, $cs->[$file], $cs->[$file+1]);
 }
+unlink qw(evecs.bin evals.bin) if $RECOVER;         # clean up
 
 #---
 sub dump_time_course {
@@ -202,14 +210,39 @@ sub uniq_tuples {
 }
 
 #---
+sub make_eigenval_links {
+  # Recovering from pre-computed eigenvalues. Since Treekin reads these from
+  # hardcoded file names 'evecs.bin' and 'evals.bin', links need to be created
+  # from the respective eigenvalue file of the current rate matrix to match
+  # the hardcoded file names.
+  my ($rates_file, $rate_suffix) = @_;
+  my $match_suffix = quotemeta $rate_suffix;    # escape regex meta chars
+  my $base_name    = $rates_file =~ s/[.]$match_suffix//r;  # remove suffix
+  my $evecs_file   = "$base_name.evecs.bin";    # eigenvecs / values are
+  my $evals_file   = "$base_name.evals.bin";    # stored along w/ rate mat
+  die "Eigenvector file '$evecs_file' and eigenvalue file '$evals_file' ",
+      'required when using --recover, but not present or empty'
+    unless -s $evecs_file and -s $evals_file;
+
+  # Create symlinks.
+  unlink qw(evecs.bin evals.bin);               # delete if existing
+  symlink $evecs_file, 'evecs.bin';
+  symlink $evals_file, 'evals.bin';
+}
+
+#---
 sub build_command {
-  my ($p_zeros, $stop, $file) = @_;
+  my ($p_zeros, $stop, $file, $recover, $ratesuffix) = @_;
   my $command = "$TREEKIN -m I";
   $command .= " --tinc=$TINC";
   $command .= " --t0=$T0";
   $command .= " --t8=$stop";
   $command .= " --Temp=$TEMP";
   $command .= " --bin";
+  if ($recover) {
+    $command .= " --recoverE";
+    make_eigenval_links $file, $ratesuffix;
+  }
   $command .= $p_zeros;
   $command .= " < $file";
  # print Dumper($command);
@@ -430,6 +463,14 @@ until the pecified stop time (recommended value 1000000).
 =item B<-rs> I<STRING>
 
 Suffix of the binary rates files produces by barriers (default: rates.bin)
+
+=item B<-recover>
+
+Recover from pre-computed (binary) eigenvectors and values (e.g. computed in
+parallel) as computed by Treekin's C<--dumpE> option.  Speeds up repeated
+simulations with different stop times etc.  For input file C<foo.rates.bin>,
+eigenvectors and -values need to be stored in files C<foo.evecs.bin> and
+C<foo.evals.bin>.
 
 =back
 

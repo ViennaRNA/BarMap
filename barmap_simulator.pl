@@ -205,6 +205,7 @@ sub uniq_tuples {
 sub build_command {
   my ($p_zeros, $stop, $file) = @_;
   my $command = "$TREEKIN -m I";
+  $command .= " --feps=-1.0";           # solves some numerical issues
   $command .= " --tinc=$TINC";
   $command .= " --t0=$T0";
   $command .= " --t8=$stop";

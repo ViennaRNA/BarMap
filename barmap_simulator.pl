@@ -17,7 +17,6 @@ use vars qw/
 /;
 
 # defaults for global(s)
-# $TREEKIN = "$ENV{HOME}/C/treekin/treekin";
 $TREEKIN = 'treekin';
 $T0 = 0.1;
 $T8 = 10;

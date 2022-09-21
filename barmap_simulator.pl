@@ -9,7 +9,12 @@ use File::Basename;
 use strict;
 use warnings;
 use Carp;
-use vars qw/$T0 $T8 $TX $P0 $TINC $TEMP $EQ @FILES $TREEKIN %ENV $RATESUFFIX/;
+use Scalar::Util qw(reftype looks_like_number);
+use YAML;
+use vars qw/
+  $T0 $T8 $TX $P0 $TINC $SIM_TIMES_FILE $TEMP $EQ @FILES $TREEKIN %ENV
+  $RATESUFFIX
+/;
 
 # defaults for global(s)
 $TREEKIN = 'treekin';
@@ -30,6 +35,7 @@ pod2usage(-verbose => 1)
 		      "t8=f"  => \$T8,
 		      "tX=f"  => \$TX,
 		      "inc=f" => \$TINC,
+		      "times-file=s" => \$SIM_TIMES_FILE,
 		      "eq=i"  => \$EQ,
 		      "T=f"   => \$TEMP,
 		      "p0=s"  => \&process_opt_p0,
@@ -45,6 +51,8 @@ my ($rs, $cs)  = parse_bar_map();
 my $p_zeros    = $P0;
 my $start_time = $T0;
 my $stop_time  = $T8; 
+my $sim_times_ref
+  = defined $SIM_TIMES_FILE ? read_sim_times_file($SIM_TIMES_FILE) : {};
 my $global_time = 0.0;
 #print Dumper(\@FILES);
 
@@ -62,8 +70,10 @@ for (my $file = 0; $file<=$#FILES; $file++) {
 #  print $OUT "p_zeros $p_zeros\n";
   my $command = build_command($p_zeros,
 			      $stop_time,
-			      $FILES[$file]);
+			      $FILES[$file],
+			      $sim_times_ref);
   print $OUT "# Cmd: $command\n"; 
+  delete $sim_times_ref->{$FILES[$file]};       # delete used time params
   my ($stop, $densities, $tc) = do_simulation($command, $flag);
   if ($stop == -1) {
     print STDERR "Treekin ERROR at inputfile $FILES[$file]\n";
@@ -77,6 +87,12 @@ for (my $file = 0; $file<=$#FILES; $file++) {
   #print ">> file is $file<<\n";
   $p_zeros = remap_densities($densities, $cs->[$file], $cs->[$file+1]);
 }
+
+# Check if all simulation time parameters from the times file have been used.
+my @unused_times_files = sort keys %$sim_times_ref;
+warn 'WARNING: Encountered simulation time parameters for the following ',
+     'unused rates files:', join ', ', @unused_times_files
+  if @unused_times_files;
 
 #---
 sub dump_time_course {
@@ -203,15 +219,15 @@ sub uniq_tuples {
 
 #---
 sub build_command {
-  my ($p_zeros, $stop, $file) = @_;
+  my ($p_zeros, $t8_default, $rates_file, $times_ref) = @_;
   my $command = "$TREEKIN -m I";
-  $command .= " --tinc=$TINC";
-  $command .= " --t0=$T0";
-  $command .= " --t8=$stop";
+  $command .= " --tinc=" . ($times_ref->{$rates_file}{inc  } // $TINC      );
+  $command .= " --t0="   . ($times_ref->{$rates_file}{start} // $T0        );
+  $command .= " --t8="   . ($times_ref->{$rates_file}{end  } // $t8_default);
   $command .= " --Temp=$TEMP";
   $command .= " --bin";
   $command .= $p_zeros;
-  $command .= " < $file";
+  $command .= " < $rates_file";
  # print Dumper($command);
   return $command;
 }
@@ -224,7 +240,7 @@ sub do_simulation {
 
   # capture treekin error
   if ($#output == $[-1) {
-    return (-1, undef, undef); 
+    return (-1, undef, undef);
   }
 
   # get last line of time course
@@ -358,9 +374,58 @@ sub to_columns {
   my $lol = [ map{[]} $[..$_[0] ]; # empty lol with right dimension
   return sub {
     return $lol unless defined $_[0]; # return result
-    map {push @{$lol->[$_->[0]]}, $_->[1]} @{$_[0]}; 
+    map {push @{$lol->[$_->[0]]}, $_->[1]} @{$_[0]};
   }
 }
+
+#---
+# Parses a YAML file containing individual simulation time parameters (i.e.
+# start time, end time, and time increment) for one or more rates files.
+# The file must contain a single dictionary where the keys are rates file
+# names. The values are, again, single dictionaries which may contain one or
+# more of the keys 'start', 'end', and 'inc', setting the respective parameter
+# for that rates file.
+#
+# Returns a hash ref containing the described data structure.
+sub read_sim_times_file {
+  my ($times_yaml_file) = @_;
+
+  # Parse simulation times from YAML file, skip undef entries (separators etc)
+  my ($times_ref, @garbage)
+    = grep {defined} YAML::LoadFile($times_yaml_file);
+
+  # Check overall consistency.
+  die "Simulation times file '$times_yaml_file' does not contain a ",
+      "single hash ref"
+    unless @garbage == 0
+           and reftype $times_ref
+           and reftype $times_ref eq reftype {}
+           ;
+
+  # Check consistency for each bar file.
+  for my $rates_file (keys %$times_ref) {
+    my $rates_times_ref = $times_ref->{$rates_file};
+    die "Simulation times file '$times_yaml_file' does not contain ",
+        "a hash ref for rates file '$rates_file'"
+      unless reftype $rates_times_ref
+             and reftype $rates_times_ref eq reftype {};
+
+    # Check general validity of start, end, inc params and its values.
+    my %is_valid_param = map {$_ => 1} qw(start end inc);
+    while (my ($param, $value) = each %$rates_times_ref) {
+      die "Simulation times file '$times_yaml_file' contains ",
+          "invalid parameter '$param' for rates file '$rates_file'"
+        unless $is_valid_param{$param};
+
+      die "Simulation times file '$times_yaml_file' contains non-positive",
+          " value '$value' for parameter '$param' of rates file '$rates_file'"
+        unless defined $value and looks_like_number $value and $value > 0.;
+    }
+  }
+
+  return $times_ref;
+}
+
 
 =head1 NAME
 
@@ -411,6 +476,25 @@ Set stop time of kinetic simulation to I<FLOAT> (default: 10.0).
 
 Set time increment of kinetic simulation to I<FLOAT> (default: 1.02).
 
+=item B<-times-file> I<STRING>
+
+Path to a YAML file containing individual simulation time parameters (i.e.,
+start time, end time, and time increment) for one or more rates files.
+This is useful, e.g., to model a variable transcription rate along the RNA.
+The values from the file overwrite the global values set via other arguments
+(C<-t0>, C<-t8>, and C<-inc>) for the specified rates files.
+
+The file is structured like this:
+
+    "10.rates.bin":
+        start: 1
+        end: 100
+        inc: 1.9
+    "12.rates.bin":
+        inc: 1.8
+
+The order of the rates files is irrelevant.
+
 =item B<-T> I<FLOAT>
 
 Set simulation temperature to I<FLOAT> (default: 37.0).
@@ -448,7 +532,7 @@ Christoph Flamm, Michael T. Wolfinger
 Please send comments and bug reports to E<lt>mtw@tbi.univie.ac.at<gt>.
 
 =cut
-    
+
 __END__
 # my $a1 = [qw/a b c d e f g/];
 # my $b1 = [qw/h i j k l m n/];

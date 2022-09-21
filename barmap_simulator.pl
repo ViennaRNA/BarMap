@@ -9,6 +9,7 @@ use File::Basename;
 use strict;
 use warnings;
 use Carp;
+use List::Util qw(all);
 use Scalar::Util qw(reftype looks_like_number);
 use YAML;
 use vars qw/
@@ -274,13 +275,19 @@ sub do_simulation {
     return (-1, undef, undef);
   }
 
-  # get last line of time course
-  $output[-2] = '#' . $output[-2] if $flag == 1;
-  my $lastline = $output[-2];
+  # get last line of time course not beginning with a '#' (i.e. no comment)
+  my $lastline_index = (grep {$output[$_] !~ /^#/} 0..$#output)[-1];
+  die 'No data found in Treekin output' unless defined $lastline_index;
+  $output[$lastline_index] = '#' . $output[$lastline_index] if $flag == 1;
+  my $lastline = $output[$lastline_index];
 
   $lastline =~ s/^\s+//;
   # extract values from last line of time course
   my @values = split /\s+/, $lastline;
+
+  # check that we found at least two and nothing but numbers.
+  die 'Received invalid last output line from Treekin: ', $lastline
+    unless @values > 1 and all {looks_like_number $_} @values;
 
   my @valuescp = @values;
   shift @valuescp;

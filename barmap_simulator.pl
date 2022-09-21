@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # -*-CPerl-*-
-# Last changed Time-stamp: <2019-02-16 14:06:05 mtw>
+# Last changed Time-stamp: <2022-09-21 21:17:09 ivo>
 
 use Getopt::Long;
 use Pod::Usage;
@@ -75,9 +75,9 @@ for (my $file = 0; $file<=$#FILES; $file++) {
 			      $stop_time,
 			      $FILES[$file],
 			      $sim_times_ref,
-            $RECOVER, 
+            $RECOVER,
             $RATESUFFIX,);
-  print $OUT "# Cmd: $command\n"; 
+  print $OUT "# Cmd: $command\n";
   delete $sim_times_ref->{$FILES[$file]};       # delete used time params
   my ($stop, $densities, $tc) = do_simulation($command, $flag);
   if ($stop == -1) {
@@ -255,7 +255,7 @@ sub build_command {
   $command .= " --bin";
   if ($recover) {
     $command .= " --recoverE";
-    make_eigenval_links $file, $ratesuffix;
+    make_eigenval_links $rates_file, $ratesuffix;
   }
   $command .= $p_zeros;
   $command .= " < $rates_file";

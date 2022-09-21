@@ -13,7 +13,7 @@ use Scalar::Util qw(reftype looks_like_number);
 use YAML;
 use vars qw/
   $T0 $T8 $TX $P0 $TINC $SIM_TIMES_FILE $TEMP $EQ @FILES $TREEKIN %ENV
-  $RATESUFFIX
+  $RATESUFFIX $RECOVER
 /;
 
 # defaults for global(s)
@@ -31,7 +31,8 @@ my $OUT;
 
 Getopt::Long::config('no_ignore_case');
 pod2usage(-verbose => 1)
-    unless GetOptions("t0=f"  => \$T0,
+    unless GetOptions(
+          "t0=f"  => \$T0,
 		      "t8=f"  => \$T8,
 		      "tX=f"  => \$TX,
 		      "inc=f" => \$TINC,
@@ -42,7 +43,9 @@ pod2usage(-verbose => 1)
 		      "rs=s"  => \$RATESUFFIX,
 		      "o=s"   => \$outfile,
 		      "man"   => sub{pod2usage(-verbose => 2)},
-		      "help"  => sub{pod2usage(-verbose => 1)});
+		      "help"  => sub{pod2usage(-verbose => 1)},
+          "recover" => \$RECOVER,
+       );
 
 defined $outfile ? open($OUT, ">", $outfile) : open($OUT, ">&STDOUT");
 die $! unless (defined $OUT);
@@ -71,7 +74,9 @@ for (my $file = 0; $file<=$#FILES; $file++) {
   my $command = build_command($p_zeros,
 			      $stop_time,
 			      $FILES[$file],
-			      $sim_times_ref);
+			      $sim_times_ref,
+            $RECOVER, 
+            $RATESUFFIX,);
   print $OUT "# Cmd: $command\n"; 
   delete $sim_times_ref->{$FILES[$file]};       # delete used time params
   my ($stop, $densities, $tc) = do_simulation($command, $flag);
@@ -87,6 +92,7 @@ for (my $file = 0; $file<=$#FILES; $file++) {
   #print ">> file is $file<<\n";
   $p_zeros = remap_densities($densities, $cs->[$file], $cs->[$file+1]);
 }
+unlink qw(evecs.bin evals.bin) if $RECOVER;         # clean up
 
 # Check if all simulation time parameters from the times file have been used.
 my @unused_times_files = sort keys %$sim_times_ref;
@@ -218,14 +224,39 @@ sub uniq_tuples {
 }
 
 #---
+sub make_eigenval_links {
+  # Recovering from pre-computed eigenvalues. Since Treekin reads these from
+  # hardcoded file names 'evecs.bin' and 'evals.bin', links need to be created
+  # from the respective eigenvalue file of the current rate matrix to match
+  # the hardcoded file names.
+  my ($rates_file, $rate_suffix) = @_;
+  my $match_suffix = quotemeta $rate_suffix;    # escape regex meta chars
+  my $base_name    = $rates_file =~ s/[.]$match_suffix//r;  # remove suffix
+  my $evecs_file   = "$base_name.evecs.bin";    # eigenvecs / values are
+  my $evals_file   = "$base_name.evals.bin";    # stored along w/ rate mat
+  die "Eigenvector file '$evecs_file' and eigenvalue file '$evals_file' ",
+      'required when using --recover, but not present or empty'
+    unless -s $evecs_file and -s $evals_file;
+
+  # Create symlinks.
+  unlink qw(evecs.bin evals.bin);               # delete if existing
+  symlink $evecs_file, 'evecs.bin';
+  symlink $evals_file, 'evals.bin';
+}
+
+#---
 sub build_command {
-  my ($p_zeros, $t8_default, $rates_file, $times_ref) = @_;
+  my ($p_zeros, $t8_default, $rates_file, $times_ref, $recover, $ratesuffix) = @_;
   my $command = "$TREEKIN -m I";
   $command .= " --tinc=" . ($times_ref->{$rates_file}{inc  } // $TINC      );
   $command .= " --t0="   . ($times_ref->{$rates_file}{start} // $T0        );
   $command .= " --t8="   . ($times_ref->{$rates_file}{end  } // $t8_default);
   $command .= " --Temp=$TEMP";
   $command .= " --bin";
+  if ($recover) {
+    $command .= " --recoverE";
+    make_eigenval_links $file, $ratesuffix;
+  }
   $command .= $p_zeros;
   $command .= " < $rates_file";
  # print Dumper($command);
@@ -514,6 +545,14 @@ until the pecified stop time (recommended value 1000000).
 =item B<-rs> I<STRING>
 
 Suffix of the binary rates files produces by barriers (default: rates.bin)
+
+=item B<-recover>
+
+Recover from pre-computed (binary) eigenvectors and values (e.g. computed in
+parallel) as computed by Treekin's C<--dumpE> option.  Speeds up repeated
+simulations with different stop times etc.  For input file C<foo.rates.bin>,
+eigenvectors and -values need to be stored in files C<foo.evecs.bin> and
+C<foo.evals.bin>.
 
 =back
 

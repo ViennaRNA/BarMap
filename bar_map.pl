@@ -5,7 +5,7 @@
 use FindBin qw($Bin);
 use lib "$Bin";
 use RNA;
-use barrier;
+use RNA::barrier;
 use Getopt::Long;
 use Pod::Usage;
 use warnings;
